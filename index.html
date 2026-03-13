@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Five Stars Molato</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+body{background:#f6f6f6;font-family:Arial;}
+.hero-banner{background:linear-gradient(120deg,#111,#444);color:white;padding:80px 0;border-radius:15px;margin-bottom:40px;}
+.hero-banner img{border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.4);}
+.product{border:none;border-radius:15px;overflow:hidden;transition:0.4s;}
+.product:hover{transform:translateY(-10px) scale(1.02);box-shadow:0 20px 40px rgba(0,0,0,0.2);}
+.product img{height:250px;object-fit:cover;}
+.card-body{text-align:center;}
+.page{display:none;}
+.active{display:block;animation:fadeIn .6s;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+.cart{position:fixed;right:20px;bottom:20px;width:320px;background:white;padding:15px;border-radius:12px;box-shadow:0 10px 20px rgba(0,0,0,0.2);display:none;max-height:500px;overflow:auto;}
+.btn-dark{border-radius:30px;}
+</style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+<div class="container">
+<a class="navbar-brand" href="#">Five Stars Molato 🌟</a>
+<button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#menu"><span class="navbar-toggler-icon"></span></button>
+<div class="collapse navbar-collapse" id="menu">
+<ul class="navbar-nav ms-auto">
+<li class="nav-item"><a class="nav-link" href="#" onclick="showPage('home')">Accueil</a></li>
+<li class="nav-item"><a class="nav-link" href="#" onclick="showPage('shopPage')">Boutique</a></li>
+<li class="nav-item"><a class="nav-link" href="#" onclick="showAdmin()">Admin</a></li>
+<li class="nav-item"><a class="nav-link" href="#" onclick="toggleCart()">Panier (<span id="cartCount">0</span>)</a></li>
+</ul>
+</div>
+</div>
+</nav>
+
+<div class="container mt-4">
+
+<div id="home" class="page active">
+<section class="hero-banner">
+<div class="container">
+<div class="row align-items-center">
+<div class="col-md-6">
+<h1 class="display-4 fw-bold">Mode moderne pour tous</h1>
+<p class="lead">Découvrez les nouvelles collections Five Stars Molato</p>
+<button class="btn btn-light btn-lg" onclick="showPage('shopPage')">Voir la boutique</button>
+</div>
+<div class="col-md-6">
+<img src="image/image 1.jpeg" class="img-fluid">
+</div>
+</div>
+</div>
+</section>
+</div>
+
+<div id="shopPage" class="page">
+<input id="search" class="form-control mb-3" placeholder="Rechercher..." onkeyup="displayProducts()">
+<div class="mb-3">
+<button class="btn btn-dark btn-sm" onclick="filterCategory('all')">Tous</button>
+<button class="btn btn-outline-dark btn-sm" onclick="filterCategory('Homme')">Homme</button>
+<button class="btn btn-outline-dark btn-sm" onclick="filterCategory('Femme')">Femme</button>
+<button class="btn btn-outline-dark btn-sm" onclick="filterCategory('Enfant')">Enfant</button>
+</div>
+<div class="row" id="shop"></div>
+</div>
+
+</div>
+
+<div class="cart" id="cartBox">
+<h5>Panier</h5>
+<div id="cartItems"></div>
+<hr>
+<h6>Total : $<span id="total">0</span></h6>
+<button class="btn btn-danger w-100 mb-2" onclick="clearCart()">🗑️ Vider le panier</button>
+<button class="btn btn-success w-100" onclick="sendOrder()">Commander sur WhatsApp</button>
+</div>
+
+<div class="container mt-5" id="adminLogin">
+<h4>Connexion Admin</h4>
+<input type="password" id="pass" class="form-control mb-2">
+<button class="btn btn-dark" onclick="login()">Connexion</button>
+</div>
+
+<div class="container mt-5" id="adminPanel">
+<h4>Admin Dashboard</h4>
+<input id="name" class="form-control mb-2" placeholder="Nom produit">
+<input id="price" class="form-control mb-2" placeholder="Prix">
+<select id="category" class="form-control mb-2">
+<option>Homme</option><option>Femme</option><option>Enfant</option>
+</select>
+<input type="file" id="image" class="form-control mb-2">
+<button class="btn btn-success mb-3" onclick="addProduct()">Ajouter produit</button>
+
+<h5>Produits</h5>
+<div id="adminProducts"></div>
+
+<h5>Changer mot de passe</h5>
+<input id="newpass" class="form-control mb-2" placeholder="Nouveau mot de passe">
+<button class="btn btn-warning" onclick="changePass()">Modifier</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+// ✨ FIREBASE CONFIGURATION (à remplacer avec la tienne)
+const firebaseConfig = {
+   apiKey: "AIzaSyBpLYeosHZnqw80hBRBzo9IUhVndQGl5KY",
+  authDomain: "five-stars-molato.firebaseapp.com",
+  projectId: "five-stars-molato",
+  storageBucket: "five-stars-molato.firebasestorage.app",
+  messagingSenderId: "604754746723",
+  appId: "1:604754746723:web:4dfbcc6dd63027d4910756",
+  measurementId: "G-X9MC99NP47"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 🌍 DONNÉES
+let products = [];
+let cart = [];
+let adminPass = "";
+let currentCategory = "all";
+
+// 🧠 CHARGER LES PRODUITS ET LE MOT DE PASSE ADMIN
+db.collection("settings").doc("admin")
+  .get().then(doc=>{
+    if(doc.exists) adminPass = doc.data().password;
+  });
+
+db.collection("products").onSnapshot(snapshot=>{
+  products = [];
+  snapshot.forEach(doc=>{
+    let p = doc.data();
+    p.id = doc.id;
+    products.push(p);
+  });
+  displayProducts();
+  displayAdminProducts();
+});
+
+// ✨ AFFICHAGE DE PAGES
+function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");}
+
+// 🚀 AFFICHER PRODUITS
+function displayProducts(){
+  let shop = document.getElementById("shop");
+  let search = document.getElementById("search").value.toLowerCase();
+  shop.innerHTML="";
+  products.forEach((p,i)=>{
+    if((currentCategory=="all"||p.category==currentCategory)
+      && p.name.toLowerCase().includes(search)){
+      shop.innerHTML+=`
+      <div class="col-md-3 mb-4">
+        <div class="card product">
+          <img src="${p.image}" class="card-img-top">
+          <div class="card-body">
+            <h5>${p.name}</h5>
+            <p>${p.category}</p>
+            <p><b>$${p.price}</b></p>
+            <button class="btn btn-dark w-100" onclick="addCart('${p.id}')">
+            Ajouter au panier
+            </button>
+          </div>
+        </div>
+      </div>
+      `;
+    }
+  });
+}
+
+// 🗃 AFFICHER PRODUITS DANS ADMIN
+function displayAdminProducts(){
+  let div = document.getElementById("adminProducts");
+  div.innerHTML="";
+  products.forEach(p=>{
+    div.innerHTML+=`
+    <div class="d-flex justify-content-between border p-2 mb-2">
+      <span>${p.name} - $${p.price} - ${p.category}</span>
+      <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">Supprimer</button>
+    </div>`;
+  });
+}
+
+// 🛒 GESTION PANIER
+function addCart(id){
+  let item = cart.find(x=>x.id == id);
+  if(item) item.qty++;
+  else {
+    let prod = products.find(x=>x.id == id);
+    cart.push({...prod, qty:1});
+  }
+  updateCart();
+}
+
+function updateCart(){
+  let div = document.getElementById("cartItems");
+  div.innerHTML="";
+  let total = 0;
+  cart.forEach((p,i)=>{
+    total += parseFloat(p.price)*p.qty;
+    div.innerHTML+=`
+    <div class="d-flex justify-content-between align-items-center border-bottom mb-2 pb-1">
+      <span>${p.name} x${p.qty}</span>
+      <button class="btn btn-sm btn-danger" onclick="removeItem(${i})">❌</button>
+    </div>`;
+  });
+  document.getElementById("total").innerText = total;
+  document.getElementById("cartCount").innerText = cart.length;
+}
+
+function removeItem(i){cart.splice(i,1);updateCart();}
+function clearCart(){cart=[];updateCart();}
+function toggleCart(){document.getElementById("cartBox").style.display = 
+document.getElementById("cartBox").style.display=="none"?"block":"none";}
+
+// 💬 COMMANDER PAR WhatsApp
+function sendOrder(){
+  let message = "🛍️ *NOUVELLE COMMANDE* %0AFive Stars Molato 🌟%0A----------------%0A";
+  let total = 0;
+  cart.forEach(p=>{
+    total += parseFloat(p.price)*p.qty;
+    message += "👕 "+p.name+"%0A📦 x"+p.qty+"%0A💰 $"+p.price+"%0A----------------%0A";
+  });
+  message += "*TOTAL : $"+total+"*%0A%0AMerci pour votre commande 🙏";
+  let url = "https://wa.me/243994175391?text="+message;
+  window.open(url);
+}
+
+// 🛠 ADMIN
+function showAdmin(){document.getElementById("adminLogin").style.display="block";}
+
+function login(){
+  let p = document.getElementById("pass").value;
+  if(p == adminPass){
+    document.getElementById("adminPanel").style.display="block";
+    displayAdminProducts();
+  } else alert("Mot de passe incorrect");
+}
+
+function addProduct(){
+let name=document.getElementById("name").value;
+let price=document.getElementById("price").value;
+let category=document.getElementById("category").value;
+let file=document.getElementById("image").files[0];
+let reader=new FileReader();
+reader.onload=function(e){
+  db.collection("products").add({
+    name:name, price:price, category:category, image:e.target.result
+  });
+};
+reader.readAsDataURL(file);
+}
+
+function deleteProduct(id){
+  db.collection("products").doc(id).delete();
+}
+
+function changePass(){
+ let np = document.getElementById("newpass").value;
+ db.collection("settings").doc("admin").set({password:np});
+ alert("Mot de passe changé");
+}
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
